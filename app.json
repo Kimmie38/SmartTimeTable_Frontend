@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "SMTT-frontend",
-    "slug": "smtt-fulafia",
+    "name": "SMTT",
+    "slug": "smtt-3tosksamf7fcboynjpf",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/university-logo.png",
@@ -51,9 +51,9 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "6ac4c6ca-e9ce-4f7f-9181-76e851d517b8"
+        "projectId": "3d2b66ca-7b99-419c-b937-318a8ece8a85"
       }
     },
-    "owner": "kimmie_08"
+    "owner": "smtt"
   }
 }

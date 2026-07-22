@@ -173,7 +173,7 @@ export default function AdminSignupScreen() {
               <TextInput
                 value={matricNumber}
                 onChangeText={setMatricNumber}
-                placeholder="ADM/CSC/001"
+                placeholder="2025/CP/CSC/0036"
                 placeholderTextColor={colors.faint}
                 autoCapitalize="characters"
                 style={fieldInputStyle}
