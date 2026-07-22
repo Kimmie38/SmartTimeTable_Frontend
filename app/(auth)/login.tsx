@@ -17,10 +17,12 @@ import { Hash, Lock, ShieldCheck, Eye, EyeOff } from "lucide-react-native";
 import { colors, font } from "@/utils/theme";
 import { useAppStore } from "@/utils/appStore";
 
+type LoginStudentFn = (matricNumber: string, password: string) => Promise<{ ok: boolean; error: string }>;
+
 export default function LoginScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { loginStudent } = useAppStore();
+  const { loginStudent } = useAppStore() as { loginStudent: LoginStudentFn };
   const [matricNumber, setMatricNumber] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);

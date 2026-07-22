@@ -1,8 +1,9 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { View, Text, ScrollView, TouchableOpacity, Switch } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { useRouter } from "expo-router";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   Bell,
   Lock,
@@ -11,20 +12,48 @@ import {
   User,
   Shield,
   Info,
-  Moon,
   Clock,
   Mail,
 } from "lucide-react-native";
-import { useAppStore } from "@/utils/appStore";
 import { colors, font } from "@/utils/theme";
+
+const PREF_KEYS = {
+  notifications: "@smtt/pref_notifications",
+  reminders: "@smtt/pref_reminders",
+};
 
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { student, logoutStudent } = useAppStore();
-  const [notifications, setNotifications] = React.useState(true);
-  const [reminders, setReminders] = React.useState(true);
-  const [darkMode, setDarkMode] = React.useState(false);
+  const [student, setStudent] = useState(null);
+  const [notifications, setNotifications] = useState(true);
+  const [reminders, setReminders] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      const raw = await AsyncStorage.getItem("@smtt/student_profile");
+      if (raw) setStudent(JSON.parse(raw));
+
+      const savedNotifications = await AsyncStorage.getItem(PREF_KEYS.notifications);
+      const savedReminders = await AsyncStorage.getItem(PREF_KEYS.reminders);
+      if (savedNotifications !== null) setNotifications(savedNotifications === "true");
+      if (savedReminders !== null) setReminders(savedReminders === "true");
+    })();
+  }, []);
+
+  const handleNotificationsChange = async (value) => {
+    setNotifications(value);
+    await AsyncStorage.setItem(PREF_KEYS.notifications, String(value));
+    // TODO: call your real notification system's enable/disable function here
+    // once you share that code — e.g. NotificationSystem.setEnabled(value)
+  };
+
+  const handleRemindersChange = async (value) => {
+    setReminders(value);
+    await AsyncStorage.setItem(PREF_KEYS.reminders, String(value));
+    // TODO: call your real reminder system's enable/disable function here
+    // once you share that code — e.g. ReminderSystem.setEnabled(value)
+  };
 
   const initials = (student?.fullName || "Student")
     .split(" ")
@@ -33,8 +62,8 @@ export default function ProfileScreen() {
     .join("")
     .toUpperCase();
 
-  const handleLogout = () => {
-    logoutStudent();
+  const handleLogout = async () => {
+    await AsyncStorage.multiRemove(["@smtt/student_token", "@smtt/student_profile"]);
     router.replace("/(auth)/login");
   };
 
@@ -152,7 +181,12 @@ export default function ProfileScreen() {
         <View style={{ marginTop: 24 }}>
           <SectionLabel>Account</SectionLabel>
           <View style={{ borderTopWidth: 1, borderTopColor: colors.divider, borderBottomWidth: 1, borderBottomColor: colors.divider }}>
-            <SettingRow icon={User} label="Personal Information" value={student?.fullName} />
+            <SettingRow
+              icon={User}
+              label="Personal Information"
+              value={student?.fullName}
+              onPress={() => router.push("/personal-info")}
+            />
             <SettingRow icon={Mail} label="Email Address" value={student?.email} />
           </View>
         </View>
@@ -160,9 +194,21 @@ export default function ProfileScreen() {
         <View style={{ marginTop: 24 }}>
           <SectionLabel>Preferences</SectionLabel>
           <View style={{ borderTopWidth: 1, borderTopColor: colors.divider, borderBottomWidth: 1, borderBottomColor: colors.divider }}>
-            <SettingRow icon={Bell} label="Lecture Notifications" isSwitch switchValue={notifications} onSwitchChange={setNotifications} />
-            <SettingRow icon={Clock} label="Class Reminders" value="30 minutes before" isSwitch switchValue={reminders} onSwitchChange={setReminders} />
-            <SettingRow icon={Moon} label="Dark Mode" isSwitch switchValue={darkMode} onSwitchChange={setDarkMode} />
+            <SettingRow
+              icon={Bell}
+              label="Lecture Notifications"
+              isSwitch
+              switchValue={notifications}
+              onSwitchChange={handleNotificationsChange}
+            />
+            <SettingRow
+              icon={Clock}
+              label="Class Reminders"
+              value="30 minutes before"
+              isSwitch
+              switchValue={reminders}
+              onSwitchChange={handleRemindersChange}
+            />
           </View>
         </View>
 
