@@ -247,6 +247,7 @@ export function AppStoreProvider({ children }) {
 
       loadStudentData,
       updateProfile,
+      registerPushToken,
 
       loginStudent,
       registerStudent,

@@ -1,9 +1,11 @@
-import React, { useEffect } from "react";
-import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl, Linking } from "react-native";
+import React, { useEffect, useState } from "react";
+import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl, Alert, Platform } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { LinearGradient } from "expo-linear-gradient";
-import { Clock, MapPin, User, FileText, Image as ImageIcon, Inbox, History as HistoryIcon } from "lucide-react-native";
+import { File, Paths } from "expo-file-system";
+import * as Sharing from "expo-sharing";
+import { Clock, MapPin, User, FileText, Image as ImageIcon, Inbox, History as HistoryIcon, Download } from "lucide-react-native";
 import { useAppStore } from "@/utils/appStore";
 import { colors, font } from "@/utils/theme";
 import { Card, EmptyState } from "@/components/ui/UI";
@@ -11,13 +13,45 @@ import { Card, EmptyState } from "@/components/ui/UI";
 export default function HistoryScreen() {
   const insets = useSafeAreaInsets();
   const { history, isHistoryLoading, historyError, fetchHistory } = useAppStore();
+  const [downloadingId, setDownloadingId] = useState(null);
 
   useEffect(() => {
     if (history.length === 0) fetchHistory();
   }, []);
 
-  const openAttachment = (url) => {
-    if (url) Linking.openURL(url).catch(() => {});
+  // Downloads the attachment to the device, then opens the native
+  // Save/Share sheet so the person can save it into Files (iOS) or
+  // their preferred app (Android) — instead of just opening it in a browser tab.
+  const downloadAttachment = async (item) => {
+    if (!item.attachment?.url) return;
+    setDownloadingId(item.id);
+    try {
+      const fileName = item.attachment.fileName || `attachment-${item.id}`;
+      const destinationFile = new File(Paths.document, fileName);
+
+      // Downloading again with the same filename can fail if it already
+      // exists from a previous attempt — clear it first.
+      if (destinationFile.exists) {
+        destinationFile.delete();
+      }
+
+      const output = await File.downloadFileAsync(item.attachment.url, destinationFile);
+
+      const canShare = await Sharing.isAvailableAsync();
+      if (canShare) {
+        await Sharing.shareAsync(output.uri);
+      } else {
+        Alert.alert("Downloaded", `Saved to ${output.uri}`);
+      }
+    } catch (err) {
+      console.log("Attachment download error:", err);
+      Alert.alert(
+        "Download failed",
+        err?.message || "Couldn't download this file. Check your connection and try again."
+      );
+    } finally {
+      setDownloadingId(null);
+    }
   };
 
   const HistoryCard = ({ item }) => (
@@ -73,7 +107,8 @@ export default function HistoryScreen() {
 
         {item.attachment ? (
           <TouchableOpacity
-            onPress={() => openAttachment(item.attachment.url)}
+            onPress={() => downloadAttachment(item)}
+            disabled={downloadingId === item.id}
             style={{
               marginTop: 14,
               flexDirection: "row",
@@ -84,6 +119,7 @@ export default function HistoryScreen() {
               padding: 10,
               borderWidth: 1,
               borderColor: colors.border,
+              opacity: downloadingId === item.id ? 0.6 : 1,
             }}
           >
             <View
@@ -107,9 +143,14 @@ export default function HistoryScreen() {
                 {item.attachment.fileName}
               </Text>
               <Text style={{ fontSize: 11, fontFamily: font.regular, color: colors.muted }}>
-                Uploaded by admin · Tap to view
+                {downloadingId === item.id ? "Downloading…" : "Uploaded by admin · Tap to download"}
               </Text>
             </View>
+            {downloadingId === item.id ? (
+              <ActivityIndicator size="small" color={colors.primary} />
+            ) : (
+              <Download size={16} color={colors.muted} />
+            )}
           </TouchableOpacity>
         ) : null}
       </View>

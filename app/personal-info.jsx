@@ -1,23 +1,16 @@
-import React, { useEffect, useState } from "react";
+import React from "react";
 import { View, Text, ScrollView, TouchableOpacity } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { useRouter } from "expo-router";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { ChevronLeft, User, Mail, Hash, Building2, GraduationCap, Calendar } from "lucide-react-native";
+import { useAppStore } from "@/utils/appStore";
 import { colors, font } from "@/utils/theme";
 
 export default function PersonalInfoScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const [student, setStudent] = useState(null);
-
-  useEffect(() => {
-    (async () => {
-      const raw = await AsyncStorage.getItem("@smtt/student_profile");
-      if (raw) setStudent(JSON.parse(raw));
-    })();
-  }, []);
+  const { student } = useAppStore();
 
   const Row = ({ icon: Icon, label, value }) => (
     <View
