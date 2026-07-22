@@ -1,8 +1,9 @@
-import React from "react";
-import { View, Text, ScrollView, TouchableOpacity } from "react-native";
+import React, { useCallback, useState } from "react";
+import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
-import { useRouter } from "expo-router";
+import { useRouter, useFocusEffect } from "expo-router";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   CalendarClock,
   ClipboardList,
@@ -15,44 +16,109 @@ import {
   UploadCloud,
 } from "lucide-react-native";
 import { colors, font, getTodayName, formatFullDate, WEEKDAYS } from "@/utils/theme";
+import { API_BASE_URL } from "@/utils/config";
 
-// --- mock data, swap for real store/API later ---
-const adminUser = {
-  fullName: "Dr. Ada Obiora",
-  title: "Course Coordinator",
-  roles: ["admin"],
-};
+// --- real data fetch: today's timetable + history count for this admin's department ---
+async function fetchDashboardData() {
+  const token = await AsyncStorage.getItem("@smtt/admin_token");
+  if (!token) {
+    return { ok: false, error: "Session expired. Please log in again." };
+  }
 
-const timetable = {
-  Monday: [
-    { id: "1", status: "Ongoing" },
-    { id: "2", status: "Pending" },
-  ],
-  Wednesday: [{ id: "3", status: "Pending" }],
-};
+  const headers = { Authorization: `Bearer ${token}` };
+  const today = getTodayName();
 
-const history = [{ id: "h1" }, { id: "h2" }, { id: "h3" }, { id: "h4" }, { id: "h5" }];
+  try {
+    const [timetableRes, historyRes] = await Promise.all([
+      fetch(`${API_BASE_URL}/api/admin/timetable?day=${today}`, { headers }),
+      fetch(`${API_BASE_URL}/api/admin/history`, { headers }),
+    ]);
 
-function logoutAdmin() {}
+    const timetableData = await timetableRes.json();
+    const historyData = await historyRes.json();
+
+    if (!timetableData.success || !historyData.success) {
+      return {
+        ok: false,
+        error: timetableData.message || historyData.message || "Could not load dashboard data.",
+      };
+    }
+
+    return {
+      ok: true,
+      todaysLectures: timetableData.data || [],
+      historyCount: historyData.count ?? (historyData.data || []).length,
+    };
+  } catch (e) {
+    return {
+      ok: false,
+      error: "Could not reach the server. Check your connection and try again.",
+    };
+  }
+}
+
+async function logoutAdmin() {
+  await AsyncStorage.multiRemove(["@smtt/admin_token", "@smtt/admin_profile"]);
+}
 
 export default function AdminDashboard() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
 
+  const [adminUser, setAdminUser] = useState(null);
+  const [todaysLectures, setTodaysLectures] = useState([]);
+  const [historyCount, setHistoryCount] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
   const today = getTodayName();
-  const todaysLectures = WEEKDAYS.includes(today) ? timetable[today] || [] : [];
+
+  const loadDashboard = useCallback(async () => {
+    setLoading(true);
+    setError("");
+
+    const storedProfile = await AsyncStorage.getItem("@smtt/admin_profile");
+    if (storedProfile) {
+      setAdminUser(JSON.parse(storedProfile));
+    }
+
+    const res = await fetchDashboardData();
+    if (res.ok) {
+      setTodaysLectures(WEEKDAYS.includes(today) ? res.todaysLectures : []);
+      setHistoryCount(res.historyCount);
+    } else {
+      setError(res.error);
+    }
+    setLoading(false);
+  }, [today]);
+
+  // Refetch every time the screen gains focus, so status changes made
+  // elsewhere (e.g. marking a lecture Ongoing) show up here in real time.
+  useFocusEffect(
+    useCallback(() => {
+      loadDashboard();
+    }, [loadDashboard])
+  );
+
   const ongoing = todaysLectures.filter((l) => l.status === "Ongoing").length;
   const pending = todaysLectures.filter((l) => l.status === "Pending").length;
 
-  const initials = adminUser.fullName
-    .split(" ")
-    .map((p) => p[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
+  const fullName = adminUser?.fullName || "";
+  const initials = fullName
+    ? fullName
+        .split(" ")
+        .map((p) => p[0])
+        .join("")
+        .slice(0, 2)
+        .toUpperCase()
+    : "";
 
-  const handleLogout = () => {
-    logoutAdmin();
+  // No "title" field exists on the User model — fall back to an accurate
+  // role label instead of an invented job title.
+  const roleLabel = adminUser?.isStudent ? "Student & Admin" : "Administrator";
+
+  const handleLogout = async () => {
+    await logoutAdmin();
     router.replace("/(auth)/login");
   };
 
@@ -84,18 +150,21 @@ export default function AdminDashboard() {
                 marginRight: 14,
               }}
             >
-              <Text style={{ fontFamily: font.semibold, fontSize: 16, color: colors.white }}>{initials}</Text>
+              {loading && !adminUser ? (
+                <ActivityIndicator size="small" color={colors.white} />
+              ) : (
+                <Text style={{ fontFamily: font.semibold, fontSize: 16, color: colors.white }}>{initials}</Text>
+              )}
             </View>
             <View style={{ flex: 1 }}>
               <Text style={{ fontSize: 17, fontFamily: font.semibold, color: colors.white }} numberOfLines={1}>
-                {adminUser.fullName}
+                {fullName || "—"}
               </Text>
               <Text
                 style={{ fontSize: 13.5, fontFamily: font.regular, color: "rgba(255,255,255,0.65)", marginTop: 2 }}
                 numberOfLines={1}
               >
-                {adminUser.title}
-                {adminUser.roles?.includes("student") ? " · Student & Admin" : ""}
+                {roleLabel}
               </Text>
             </View>
           </View>
@@ -134,11 +203,46 @@ export default function AdminDashboard() {
       </View>
 
       <ScrollView contentContainerStyle={{ padding: 24, paddingBottom: 60 }}>
+        {error ? (
+          <View
+            style={{
+              backgroundColor: colors.warningBg || "#FFF4E5",
+              borderRadius: 14,
+              padding: 14,
+              marginTop: 24,
+              marginBottom: 8,
+            }}
+          >
+            <Text style={{ color: colors.danger, fontFamily: font.medium, fontSize: 13.5 }}>{error}</Text>
+            <TouchableOpacity onPress={loadDashboard} style={{ marginTop: 8 }}>
+              <Text style={{ color: colors.primary, fontFamily: font.semibold, fontSize: 13.5 }}>Try again</Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
+
         {/* Stat cards */}
         <View style={{ flexDirection: "row", gap: 14, marginTop: 24, marginBottom: 32 }}>
-          <StatCard icon={Activity} label="Ongoing now" value={ongoing} tint={colors.success} bg={colors.successBg} />
-          <StatCard icon={Hourglass} label="Pending today" value={pending} tint={colors.warning} bg={colors.warningBg} />
-          <StatCard icon={CheckCircle2} label="Complete" value={history.length} tint={colors.info} bg={colors.infoBg} />
+          <StatCard
+            icon={Activity}
+            label="Ongoing now"
+            value={loading ? "…" : ongoing}
+            tint={colors.success}
+            bg={colors.successBg}
+          />
+          <StatCard
+            icon={Hourglass}
+            label="Pending today"
+            value={loading ? "…" : pending}
+            tint={colors.warning}
+            bg={colors.warningBg}
+          />
+          <StatCard
+            icon={CheckCircle2}
+            label="Complete"
+            value={loading ? "…" : historyCount}
+            tint={colors.info}
+            bg={colors.infoBg}
+          />
         </View>
 
         <Text
@@ -181,7 +285,7 @@ export default function AdminDashboard() {
         <ActionRow
           icon={History}
           title="Attendance History"
-          subtitle={`${history.length} completed record${history.length === 1 ? "" : "s"}`}
+          subtitle={loading ? "Loading…" : `${historyCount} completed record${historyCount === 1 ? "" : "s"}`}
           tint={colors.info}
           bg={colors.infoBg}
           onPress={() => router.push("/admin/lectures")}

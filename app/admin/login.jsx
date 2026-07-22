@@ -2,7 +2,6 @@ import React, { useState } from "react";
 import {
   View,
   Text,
-  ScrollView,
   TouchableOpacity,
   TextInput,
   KeyboardAvoidingView,
@@ -10,6 +9,7 @@ import {
   ActivityIndicator,
   Image,
 } from "react-native";
+import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
@@ -19,16 +19,16 @@ import { colors, font } from "@/utils/theme";
 import { API_BASE_URL } from "@/utils/config";
 
 // --- real admin login against the backend ---
-async function loginAdmin(email, password) {
+async function loginAdmin(matricNumber, password) {
   try {
     const res = await fetch(`${API_BASE_URL}/api/admin/auth/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ matricNumber, password }),
     });
     const data = await res.json();
     if (!data.success) {
-      return { ok: false, error: data.message || "Invalid email or password." };
+      return { ok: false, error: data.message || "Invalid matric number or password." };
     }
     await AsyncStorage.setItem("@smtt/admin_token", data.data.token);
     await AsyncStorage.setItem("@smtt/admin_profile", JSON.stringify(data.data));
@@ -72,7 +72,7 @@ export default function AdminLoginScreen() {
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
       <StatusBar style="light" />
-      <ScrollView
+      <KeyboardAwareScrollView
         contentContainerStyle={{
           flexGrow: 1,
           paddingTop: insets.top + 16,
@@ -80,6 +80,8 @@ export default function AdminLoginScreen() {
           paddingHorizontal: 24,
         }}
         keyboardShouldPersistTaps="handled"
+        enableOnAndroid
+        extraHeight={24}
       >
         <TouchableOpacity
           onPress={() => router.back()}
@@ -210,7 +212,7 @@ export default function AdminLoginScreen() {
             </Text>
           </TouchableOpacity>
         </View>
-      </ScrollView>
+      </KeyboardAwareScrollView>
     </KeyboardAvoidingView>
   );
 }

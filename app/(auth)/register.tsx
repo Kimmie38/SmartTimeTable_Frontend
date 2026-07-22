@@ -2,13 +2,13 @@ import React, { useState } from "react";
 import {
   View,
   Text,
-  ScrollView,
   TouchableOpacity,
   TextInput,
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
 } from "react-native";
+import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
@@ -146,12 +146,14 @@ const [showConfirmPassword, setShowConfirmPassword] = useState(false);
         </TouchableOpacity>
       </View>
 
-      <ScrollView
+      <KeyboardAwareScrollView
         contentContainerStyle={{
           paddingHorizontal: 24,
           paddingBottom: insets.bottom + 24,
         }}
         keyboardShouldPersistTaps="handled"
+        enableOnAndroid
+        extraHeight={24}
       >
         <View style={{ marginBottom: 24 }}>
           <Text style={{ fontSize: 26, fontFamily: font.bold, color: colors.ink, letterSpacing: -0.5 }}>
@@ -316,7 +318,7 @@ const [showConfirmPassword, setShowConfirmPassword] = useState(false);
             </Text>
           </TouchableOpacity>
         </View>
-      </ScrollView>
+      </KeyboardAwareScrollView>
     </KeyboardAvoidingView>
   );
 }

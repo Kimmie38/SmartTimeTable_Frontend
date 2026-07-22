@@ -2,20 +2,22 @@ import React, { useState } from "react";
 import {
   View,
   Text,
-  ScrollView,
   TouchableOpacity,
   TextInput,
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
 } from "react-native";
+import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { ChevronLeft, User, Mail, Hash, Lock, Briefcase, Info, KeyRound } from "lucide-react-native";
+import { ChevronLeft, User, Mail, Hash, Lock, Layers, Info, KeyRound, Eye, EyeOff } from "lucide-react-native";
 import { colors, font } from "@/utils/theme";
-import { API_BASE_URL, ADMIN_REGISTRATION_KEY } from "@/utils/config";
+import { API_BASE_URL } from "@/utils/config";
+
+const LEVELS = [100, 200, 300, 400];
 
 // --- real admin registration against the backend ---
 async function registerAdmin(data) {
@@ -26,6 +28,8 @@ async function registerAdmin(data) {
       body: JSON.stringify({
         fullName: data.fullName,
         email: data.email,
+        matricNumber: data.matricNumber,
+        level: data.level,
         password: data.password,
         registrationKey: data.registrationKey,
       }),
@@ -52,17 +56,29 @@ export default function AdminSignupScreen() {
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [matricNumber, setMatricNumber] = useState("");
-  const [title, setTitle] = useState("");
+  const [level, setLevel] = useState(null);
   const [registrationKey, setRegistrationKey] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
   const handleRegister = async () => {
     setError("");
-    if (!fullName.trim() || !email.trim() || !registrationKey.trim() || !password) {
+    if (
+      !fullName.trim() ||
+      !email.trim() ||
+      !matricNumber.trim() ||
+      !registrationKey.trim() ||
+      !password
+    ) {
       setError("Please fill in all required fields.");
+      return;
+    }
+    if (!level) {
+      setError("Select the level you'll be managing.");
       return;
     }
     if (password.length < 6) {
@@ -78,7 +94,7 @@ export default function AdminSignupScreen() {
       fullName: fullName.trim(),
       email: email.trim(),
       matricNumber: matricNumber.trim(),
-      title: title.trim(),
+      level,
       registrationKey: registrationKey.trim(),
       password,
     });
@@ -113,9 +129,11 @@ export default function AdminSignupScreen() {
         </TouchableOpacity>
       </View>
 
-      <ScrollView
+      <KeyboardAwareScrollView
         contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: insets.bottom + 24 }}
         keyboardShouldPersistTaps="handled"
+        enableOnAndroid
+        extraHeight={24}
       >
         <View style={{ marginBottom: 24 }}>
           <Text style={{ fontSize: 24, fontFamily: font.bold, color: colors.white, letterSpacing: -0.5 }}>
@@ -151,7 +169,7 @@ export default function AdminSignupScreen() {
               />
             </Field>
 
-            <Field label="Staff ID / Matric Number (optional)" icon={Hash}>
+            <Field label="Staff ID / Matric Number" icon={Hash}>
               <TextInput
                 value={matricNumber}
                 onChangeText={setMatricNumber}
@@ -162,16 +180,50 @@ export default function AdminSignupScreen() {
               />
             </Field>
 
-            <Field label="Role / Title (optional)" icon={Briefcase}>
-              <TextInput
-                value={title}
-                onChangeText={setTitle}
-                placeholder="e.g. Course Coordinator"
-                placeholderTextColor={colors.faint}
-                autoCapitalize="words"
-                style={fieldInputStyle}
-              />
-            </Field>
+            {/* Level selector — determines which students see what this admin creates */}
+            <View>
+              <Text style={{ fontFamily: font.medium, fontSize: 13, color: colors.ink, marginBottom: 6 }}>
+                Level You'll Manage
+              </Text>
+              <View style={{ flexDirection: "row", gap: 8 }}>
+                {LEVELS.map((lvl) => {
+                  const selected = level === lvl;
+                  return (
+                    <TouchableOpacity
+                      key={lvl}
+                      onPress={() => setLevel(lvl)}
+                      activeOpacity={0.85}
+                      style={{
+                        flex: 1,
+                        flexDirection: "row",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: 6,
+                        borderWidth: 1,
+                        borderColor: selected ? colors.primary : colors.accentLight,
+                        backgroundColor: selected ? colors.primary : colors.white,
+                        borderRadius: 12,
+                        paddingVertical: 12,
+                      }}
+                    >
+                      <Layers size={14} color={selected ? colors.white : colors.muted} />
+                      <Text
+                        style={{
+                          fontFamily: font.semibold,
+                          fontSize: 13.5,
+                          color: selected ? colors.white : colors.ink,
+                        }}
+                      >
+                        {lvl}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+              <Text style={{ fontSize: 11.5, color: colors.muted, fontFamily: font.regular, marginTop: 6 }}>
+                Each level allows a maximum of 2 admin accounts.
+              </Text>
+            </View>
 
             <Field label="Registration Key" icon={KeyRound}>
               <TextInput
@@ -190,9 +242,16 @@ export default function AdminSignupScreen() {
                 onChangeText={setPassword}
                 placeholder="Minimum 6 characters"
                 placeholderTextColor={colors.faint}
-                secureTextEntry
+                secureTextEntry={!showPassword}
                 style={fieldInputStyle}
               />
+              <TouchableOpacity onPress={() => setShowPassword((s) => !s)}>
+                {showPassword ? (
+                  <EyeOff size={18} color={colors.muted} />
+                ) : (
+                  <Eye size={18} color={colors.muted} />
+                )}
+              </TouchableOpacity>
             </Field>
 
             <Field label="Confirm Password" icon={Lock}>
@@ -201,9 +260,16 @@ export default function AdminSignupScreen() {
                 onChangeText={setConfirmPassword}
                 placeholder="Re-enter password"
                 placeholderTextColor={colors.faint}
-                secureTextEntry
+                secureTextEntry={!showConfirmPassword}
                 style={fieldInputStyle}
               />
+              <TouchableOpacity onPress={() => setShowConfirmPassword((s) => !s)}>
+                {showConfirmPassword ? (
+                  <EyeOff size={18} color={colors.muted} />
+                ) : (
+                  <Eye size={18} color={colors.muted} />
+                )}
+              </TouchableOpacity>
             </Field>
           </View>
 
@@ -228,7 +294,8 @@ export default function AdminSignupScreen() {
             <Text style={{ flex: 1, fontSize: 12, color: colors.body, fontFamily: font.regular, lineHeight: 17 }}>
               Already have a student account? Enter the same email and password here to link
               admin access to it — you'll be able to sign in to both the student and admin
-              portals with one account.
+              portals with one account. Your existing matric number will carry over as your
+              admin login too.
             </Text>
           </View>
 
@@ -264,7 +331,7 @@ export default function AdminSignupScreen() {
             <Text style={{ color: colors.accent, fontFamily: font.semibold, fontSize: 14 }}>Sign in</Text>
           </TouchableOpacity>
         </View>
-      </ScrollView>
+      </KeyboardAwareScrollView>
     </KeyboardAvoidingView>
   );
 }

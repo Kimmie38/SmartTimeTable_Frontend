@@ -2,7 +2,6 @@ import React, { useState } from "react";
 import {
   View,
   Text,
-  ScrollView,
   TouchableOpacity,
   TextInput,
   KeyboardAvoidingView,
@@ -10,6 +9,7 @@ import {
   ActivityIndicator,
   Image,
 } from "react-native";
+import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
@@ -72,7 +72,7 @@ export default function LoginScreen() {
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
       <StatusBar style="dark" />
-      <ScrollView
+      <KeyboardAwareScrollView
         contentContainerStyle={{
           flexGrow: 1,
           paddingTop: insets.top + 32,
@@ -80,6 +80,8 @@ export default function LoginScreen() {
           paddingHorizontal: 24,
         }}
         keyboardShouldPersistTaps="handled"
+        enableOnAndroid
+        extraHeight={24}
       >
         {/* Logo */}
         <View style={{ alignItems: "center", marginBottom: 36 }}>
@@ -274,7 +276,7 @@ export default function LoginScreen() {
             Staff / Admin Portal
           </Text>
         </TouchableOpacity>
-      </ScrollView>
+      </KeyboardAwareScrollView>
     </KeyboardAvoidingView>
   );
 }
