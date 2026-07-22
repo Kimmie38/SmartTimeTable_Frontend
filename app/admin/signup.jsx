@@ -12,12 +12,37 @@ import {
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
-import { ChevronLeft, User, Mail, Hash, Lock, Briefcase, Info } from "lucide-react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { ChevronLeft, User, Mail, Hash, Lock, Briefcase, Info, KeyRound } from "lucide-react-native";
 import { colors, font } from "@/utils/theme";
+import { API_BASE_URL, ADMIN_REGISTRATION_KEY } from "@/utils/config";
 
-// --- mock admin registration, swap for real API/store later ---
-function registerAdmin(data) {
-  return { ok: true };
+// --- real admin registration against the backend ---
+async function registerAdmin(data) {
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/admin/auth/register`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        fullName: data.fullName,
+        email: data.email,
+        password: data.password,
+        registrationKey: data.registrationKey,
+      }),
+    });
+    const result = await res.json();
+    if (!result.success) {
+      return { ok: false, error: result.message || "Registration failed." };
+    }
+    await AsyncStorage.setItem("@smtt/admin_token", result.data.token);
+    await AsyncStorage.setItem("@smtt/admin_profile", JSON.stringify(result.data));
+    return { ok: true };
+  } catch (e) {
+    return {
+      ok: false,
+      error: "Could not reach the server. Check your connection and try again.",
+    };
+  }
 }
 
 export default function AdminSignupScreen() {
@@ -28,14 +53,15 @@ export default function AdminSignupScreen() {
   const [email, setEmail] = useState("");
   const [matricNumber, setMatricNumber] = useState("");
   const [title, setTitle] = useState("");
+  const [registrationKey, setRegistrationKey] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const handleRegister = () => {
+  const handleRegister = async () => {
     setError("");
-    if (!fullName.trim() || !email.trim() || !matricNumber.trim() || !password) {
+    if (!fullName.trim() || !email.trim() || !registrationKey.trim() || !password) {
       setError("Please fill in all required fields.");
       return;
     }
@@ -48,21 +74,20 @@ export default function AdminSignupScreen() {
       return;
     }
     setLoading(true);
-    setTimeout(() => {
-      const res = registerAdmin({
-        fullName: fullName.trim(),
-        email: email.trim(),
-        matricNumber: matricNumber.trim(),
-        title: title.trim(),
-        password,
-      });
-      setLoading(false);
-      if (res.ok) {
-        router.replace("/admin/dashboard");
-      } else {
-        setError("Something went wrong. Try again.");
-      }
-    }, 400);
+    const res = await registerAdmin({
+      fullName: fullName.trim(),
+      email: email.trim(),
+      matricNumber: matricNumber.trim(),
+      title: title.trim(),
+      registrationKey: registrationKey.trim(),
+      password,
+    });
+    setLoading(false);
+    if (res.ok) {
+      router.replace("/admin/dashboard");
+    } else {
+      setError(res.error);
+    }
   };
 
   return (
@@ -126,7 +151,7 @@ export default function AdminSignupScreen() {
               />
             </Field>
 
-            <Field label="Staff ID / Matric Number" icon={Hash}>
+            <Field label="Staff ID / Matric Number (optional)" icon={Hash}>
               <TextInput
                 value={matricNumber}
                 onChangeText={setMatricNumber}
@@ -144,6 +169,17 @@ export default function AdminSignupScreen() {
                 placeholder="e.g. Course Coordinator"
                 placeholderTextColor={colors.faint}
                 autoCapitalize="words"
+                style={fieldInputStyle}
+              />
+            </Field>
+
+            <Field label="Registration Key" icon={KeyRound}>
+              <TextInput
+                value={registrationKey}
+                onChangeText={setRegistrationKey}
+                placeholder="Provided by your project setup"
+                placeholderTextColor={colors.faint}
+                secureTextEntry
                 style={fieldInputStyle}
               />
             </Field>
@@ -190,9 +226,9 @@ export default function AdminSignupScreen() {
           >
             <Info size={15} color={colors.primary} style={{ marginTop: 1 }} />
             <Text style={{ flex: 1, fontSize: 12, color: colors.body, fontFamily: font.regular, lineHeight: 17 }}>
-              Already have a student account? Enter the same ID and password here to link admin
-              access to it — you'll be able to sign in to both the student and admin portals with
-              one account.
+              Already have a student account? Enter the same email and password here to link
+              admin access to it — you'll be able to sign in to both the student and admin
+              portals with one account.
             </Text>
           </View>
 

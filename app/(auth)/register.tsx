@@ -12,16 +12,24 @@ import {
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
-import { ChevronLeft, User, Mail, Hash, Lock, Building2 } from "lucide-react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { ChevronLeft, User, Mail, Hash, Lock, Building2, Eye, EyeOff } from "lucide-react-native";
 import { colors, font } from "@/utils/theme";
+import { API_BASE_URL } from "@/utils/config";
 
-// --- local constants, swap for real data source later ---
+// --- local constants ---
 const DEPARTMENT = "Computer Science";
 const LEVELS = ["100", "200", "300", "400"];
 const SEMESTERS = ["First Semester", "Second Semester"];
 
-// --- mock register, swap for real API/store later ---
-function registerStudent(data: {
+
+// UI shows "First Semester" / "Second Semester" — backend only accepts "First" / "Second"
+function semesterToBackend(uiValue: string) {
+  return uiValue.startsWith("First") ? "First" : "Second";
+}
+
+// --- real registration against the backend ---
+async function registerStudent(data: {
   fullName: string;
   email: string;
   matricNumber: string;
@@ -29,7 +37,32 @@ function registerStudent(data: {
   semester: string;
   password: string;
 }) {
-  return { ok: true };
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/auth/register`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        fullName: data.fullName,
+        email: data.email,
+        matricNumber: data.matricNumber,
+        level: parseInt(data.level, 10),
+        semester: semesterToBackend(data.semester),
+        password: data.password,
+      }),
+    });
+    const result = await res.json();
+    if (!result.success) {
+      return { ok: false, error: result.message || "Registration failed." };
+    }
+    await AsyncStorage.setItem("@smtt/student_token", result.data.token);
+    await AsyncStorage.setItem("@smtt/student_profile", JSON.stringify(result.data));
+    return { ok: true };
+  } catch (e) {
+    return {
+      ok: false,
+      error: "Could not reach the server. Check your connection and try again.",
+    };
+  }
 }
 
 export default function RegisterScreen() {
@@ -45,8 +78,10 @@ export default function RegisterScreen() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-  const handleRegister = () => {
+  const handleRegister = async () => {
     setError("");
     if (!fullName.trim() || !email.trim() || !matricNumber.trim() || !password) {
       setError("Please fill in all required fields.");
@@ -61,22 +96,20 @@ export default function RegisterScreen() {
       return;
     }
     setLoading(true);
-    setTimeout(() => {
-      const res = registerStudent({
-        fullName: fullName.trim(),
-        email: email.trim(),
-        matricNumber: matricNumber.trim(),
-        level,
-        semester,
-        password,
-      });
-      setLoading(false);
-      if (res.ok) {
-        router.replace("/(tabs)/home");
-      } else {
-        setError("Something went wrong. Try again.");
-      }
-    }, 400);
+    const res = await registerStudent({
+      fullName: fullName.trim(),
+      email: email.trim(),
+      matricNumber: matricNumber.trim(),
+      level,
+      semester,
+      password,
+    });
+    setLoading(false);
+    if (res.ok) {
+      router.replace("/(tabs)/home");
+    } else {
+      setError(res.error);
+    }
   };
 
   return (
@@ -160,7 +193,7 @@ export default function RegisterScreen() {
             <TextInput
               value={matricNumber}
               onChangeText={setMatricNumber}
-              placeholder="U12/CSC/1001"
+              placeholder="2025/CP/CSC/0036"
               placeholderTextColor={colors.faint}
               autoCapitalize="characters"
               style={fieldInputStyle}
@@ -212,9 +245,16 @@ export default function RegisterScreen() {
               onChangeText={setPassword}
               placeholder="Minimum 6 characters"
               placeholderTextColor={colors.faint}
-              secureTextEntry
+              secureTextEntry={!showPassword}
               style={fieldInputStyle}
             />
+            <TouchableOpacity onPress={() => setShowPassword((s) => !s)}>
+                            {showConfirmPassword? (
+                              <EyeOff size={18} color={colors.muted} />
+                            ) : (
+                              <Eye size={18} color={colors.muted} />
+                            )}
+            </TouchableOpacity>
           </Field>
 
           {/* Confirm Password */}
@@ -224,9 +264,16 @@ export default function RegisterScreen() {
               onChangeText={setConfirmPassword}
               placeholder="Re-enter password"
               placeholderTextColor={colors.faint}
-              secureTextEntry
+              secureTextEntry={!showConfirmPassword}
               style={fieldInputStyle}
             />
+            <TouchableOpacity onPress={() => setShowConfirmPassword((s) => !s)}>
+                            {showConfirmPassword ? (
+                              <EyeOff size={18} color={colors.muted} />
+                            ) : (
+                              <Eye size={18} color={colors.muted} />
+                            )}
+            </TouchableOpacity>
           </Field>
         </View>
 

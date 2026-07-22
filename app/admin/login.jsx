@@ -13,41 +13,57 @@ import {
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
-import { ChevronLeft, UserCog, Lock } from "lucide-react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { ChevronLeft, UserCog, Lock, Eye, EyeOff } from "lucide-react-native";
 import { colors, font } from "@/utils/theme";
+import { API_BASE_URL } from "@/utils/config";
 
-// --- mock admin login, swap for real API/store later ---
-function loginAdmin(username, password) {
-  if (username.trim().toUpperCase() === "ADM/CSC/001" && password === "admin123") {
+// --- real admin login against the backend ---
+async function loginAdmin(email, password) {
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/admin/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password }),
+    });
+    const data = await res.json();
+    if (!data.success) {
+      return { ok: false, error: data.message || "Invalid email or password." };
+    }
+    await AsyncStorage.setItem("@smtt/admin_token", data.data.token);
+    await AsyncStorage.setItem("@smtt/admin_profile", JSON.stringify(data.data));
     return { ok: true };
+  } catch (e) {
+    return {
+      ok: false,
+      error: "Could not reach the server. Check your connection and try again.",
+    };
   }
-  return { ok: false, error: "Invalid staff ID or password." };
 }
 
 export default function AdminLoginScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const [username, setUsername] = useState("");
+  const [matricNumber, setMatricNumber] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const handleLogin = () => {
+  const handleLogin = async () => {
     setError("");
-    if (!username.trim() || !password) {
-      setError("Enter your admin username and password.");
+    if (!matricNumber.trim() || !password) {
+      setError("Enter your admin matric number and password.");
       return;
     }
     setLoading(true);
-    setTimeout(() => {
-      const res = loginAdmin(username, password);
-      setLoading(false);
-      if (res.ok) {
-        router.replace("/admin/dashboard");
-      } else {
-        setError(res.error);
-      }
-    }, 400);
+    const res = await loginAdmin(matricNumber.trim(), password);
+    setLoading(false);
+    if (res.ok) {
+      router.replace("/admin/dashboard");
+    } else {
+      setError(res.error);
+    }
   };
 
   return (
@@ -124,11 +140,11 @@ export default function AdminLoginScreen() {
           }}
         >
           <View style={{ gap: 18 }}>
-            <Field label="Staff ID / Matric Number" icon={UserCog}>
+            <Field label="Admin Matric Number" icon={UserCog}>
               <TextInput
-                value={username}
-                onChangeText={setUsername}
-                placeholder="ADM/CSC/001"
+                value={matricNumber}
+                onChangeText={setMatricNumber}
+                placeholder="2025/CP/CSC/0036"
                 placeholderTextColor={colors.faint}
                 autoCapitalize="characters"
                 style={fieldInputStyle}
@@ -141,9 +157,16 @@ export default function AdminLoginScreen() {
                 onChangeText={setPassword}
                 placeholder="••••••••"
                 placeholderTextColor={colors.faint}
-                secureTextEntry
+                secureTextEntry={!showPassword}
                 style={fieldInputStyle}
               />
+              <TouchableOpacity onPress={() => setShowPassword((s) => !s)}>
+                {showPassword ? (
+                  <EyeOff size={18} color={colors.muted} />
+                ) : (
+                  <Eye size={18} color={colors.muted} />
+                )}
+              </TouchableOpacity>
             </Field>
           </View>
 
@@ -187,18 +210,6 @@ export default function AdminLoginScreen() {
             </Text>
           </TouchableOpacity>
         </View>
-
-        <Text
-          style={{
-            fontSize: 11,
-            color: "rgba(255,255,255,0.5)",
-            fontFamily: font.regular,
-            textAlign: "center",
-            marginTop: 16,
-          }}
-        >
-          Demo login · ADM/CSC/001 · admin123
-        </Text>
       </ScrollView>
     </KeyboardAvoidingView>
   );
