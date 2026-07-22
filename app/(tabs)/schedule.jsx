@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { View, Text, ScrollView, TouchableOpacity } from "react-native";
+import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { LinearGradient } from "expo-linear-gradient";
@@ -10,7 +10,7 @@ import { StatusBadge, EmptyState } from "@/components/ui/UI";
 
 export default function ScheduleScreen() {
   const insets = useSafeAreaInsets();
-  const { timetable } = useAppStore();
+  const { timetable, isTimetableLoading, timetableError, fetchTimetable } = useAppStore();
   const today = getTodayName();
   const defaultDay = WEEKDAYS.includes(today) ? today : "Monday";
   const [selectedDay, setSelectedDay] = useState(defaultDay);
@@ -55,7 +55,7 @@ export default function ScheduleScreen() {
           </Text>
           <Text style={{ fontSize: 12, color: colors.faint }}>·</Text>
           <Text style={{ fontSize: 12, color: colors.muted, fontFamily: font.regular, flexShrink: 1 }}>
-            {lecture.lecturerName}
+            {lecture.lecturer}
           </Text>
         </View>
       </View>
@@ -66,7 +66,12 @@ export default function ScheduleScreen() {
     <View style={{ flex: 1, backgroundColor: colors.background }}>
       <StatusBar style="dark" />
 
-      <ScrollView contentContainerStyle={{ paddingBottom: 110 }}>
+      <ScrollView
+        contentContainerStyle={{ paddingBottom: 110 }}
+        refreshControl={
+          <RefreshControl refreshing={isTimetableLoading} onRefresh={fetchTimetable} tintColor={colors.primary} />
+        }
+      >
         {/* Flat eyebrow — plain background, scrolls with content */}
         <View style={{ paddingTop: insets.top + 16, paddingHorizontal: 24, paddingBottom: 4 }}>
           <Text style={{ fontSize: 11, fontFamily: font.semibold, color: colors.muted, textTransform: "uppercase", letterSpacing: 1 }}>
@@ -189,7 +194,22 @@ export default function ScheduleScreen() {
         </View>
 
         <View style={{ paddingHorizontal: 24 }}>
-          {lectures.length > 0 ? (
+          {isTimetableLoading && Object.keys(timetable).length === 0 ? (
+            <View style={{ paddingVertical: 40, alignItems: "center" }}>
+              <ActivityIndicator color={colors.primary} />
+            </View>
+          ) : timetableError ? (
+            <>
+              <EmptyState
+                icon={CalendarX2}
+                title="Couldn't load your schedule"
+                subtitle={timetableError}
+              />
+              <TouchableOpacity onPress={fetchTimetable} style={{ alignSelf: "center", marginTop: 12, paddingVertical: 8 }}>
+                <Text style={{ color: colors.primary, fontFamily: font.semibold, fontSize: 13.5 }}>Try again</Text>
+              </TouchableOpacity>
+            </>
+          ) : lectures.length > 0 ? (
             lectures.map((lecture) => <LectureRow key={lecture.id} lecture={lecture} />)
           ) : (
             <EmptyState

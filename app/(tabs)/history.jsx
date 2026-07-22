@@ -1,5 +1,5 @@
-import React from "react";
-import { View, Text, ScrollView, TouchableOpacity } from "react-native";
+import React, { useEffect } from "react";
+import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl, Linking } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { LinearGradient } from "expo-linear-gradient";
@@ -10,7 +10,15 @@ import { Card, EmptyState } from "@/components/ui/UI";
 
 export default function HistoryScreen() {
   const insets = useSafeAreaInsets();
-  const { history } = useAppStore();
+  const { history, isHistoryLoading, historyError, fetchHistory } = useAppStore();
+
+  useEffect(() => {
+    if (history.length === 0) fetchHistory();
+  }, []);
+
+  const openAttachment = (url) => {
+    if (url) Linking.openURL(url).catch(() => {});
+  };
 
   const HistoryCard = ({ item }) => (
     <View
@@ -58,13 +66,14 @@ export default function HistoryScreen() {
         </View>
 
         <View style={{ gap: 7 }}>
-          <Row icon={User} text={item.lecturerName} />
+          <Row icon={User} text={item.lecturer} />
           <Row icon={MapPin} text={item.venue} />
-          <Row icon={Clock} text={`${item.startTime} - ${item.endTime}`} />
+          <Row icon={Clock} text={item.time} />
         </View>
 
         {item.attachment ? (
           <TouchableOpacity
+            onPress={() => openAttachment(item.attachment.url)}
             style={{
               marginTop: 14,
               flexDirection: "row",
@@ -82,12 +91,12 @@ export default function HistoryScreen() {
                 width: 34,
                 height: 34,
                 borderRadius: 8,
-                backgroundColor: item.attachment.type === "pdf" ? colors.dangerBg : colors.primaryLight,
+                backgroundColor: item.attachment.fileType === "pdf" ? colors.dangerBg : colors.primaryLight,
                 justifyContent: "center",
                 alignItems: "center",
               }}
             >
-              {item.attachment.type === "pdf" ? (
+              {item.attachment.fileType === "pdf" ? (
                 <FileText size={16} color={colors.danger} />
               ) : (
                 <ImageIcon size={16} color={colors.primary} />
@@ -95,7 +104,7 @@ export default function HistoryScreen() {
             </View>
             <View style={{ flex: 1 }}>
               <Text style={{ fontSize: 12.5, fontFamily: font.medium, color: colors.ink }} numberOfLines={1}>
-                {item.attachment.name}
+                {item.attachment.fileName}
               </Text>
               <Text style={{ fontSize: 11, fontFamily: font.regular, color: colors.muted }}>
                 Uploaded by admin · Tap to view
@@ -111,7 +120,12 @@ export default function HistoryScreen() {
     <View style={{ flex: 1, backgroundColor: colors.background }}>
       <StatusBar style="dark" />
 
-      <ScrollView contentContainerStyle={{ paddingBottom: 110 }}>
+      <ScrollView
+        contentContainerStyle={{ paddingBottom: 110 }}
+        refreshControl={
+          <RefreshControl refreshing={isHistoryLoading} onRefresh={fetchHistory} tintColor={colors.primary} />
+        }
+      >
         {/* Flat greeting row — plain background, no card, no border */}
         <View style={{ paddingTop: insets.top + 16, paddingHorizontal: 24, paddingBottom: 4 }}>
           <Text style={{ fontSize: 11, fontFamily: font.semibold, color: colors.muted, letterSpacing: 0.5, textTransform: "uppercase" }}>
@@ -175,7 +189,18 @@ export default function HistoryScreen() {
         </View>
 
         <View style={{ paddingHorizontal: 24 }}>
-          {history.length > 0 ? (
+          {isHistoryLoading && history.length === 0 ? (
+            <View style={{ paddingVertical: 40, alignItems: "center" }}>
+              <ActivityIndicator color={colors.primary} />
+            </View>
+          ) : historyError ? (
+            <>
+              <EmptyState icon={Inbox} title="Couldn't load history" subtitle={historyError} />
+              <TouchableOpacity onPress={fetchHistory} style={{ alignSelf: "center", marginTop: 12, paddingVertical: 8 }}>
+                <Text style={{ color: colors.primary, fontFamily: font.semibold, fontSize: 13.5 }}>Try again</Text>
+              </TouchableOpacity>
+            </>
+          ) : history.length > 0 ? (
             history.map((item) => <HistoryCard key={item.id} item={item} />)
           ) : (
             <EmptyState icon={Inbox} title="No history yet" subtitle="Completed lectures will show up here." />
@@ -196,6 +221,6 @@ function Row({ icon: Icon, text }) {
 }
 
 function formatDate(dateStr) {
-  const d = new Date(dateStr + "T00:00:00");
+  const d = new Date(dateStr);
   return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" });
 }

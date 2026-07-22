@@ -1,5 +1,5 @@
-import React from "react";
-import { View, Text, ScrollView } from "react-native";
+import React, { useEffect } from "react";
+import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { LinearGradient } from "expo-linear-gradient";
@@ -10,7 +10,11 @@ import { Card, EmptyState } from "@/components/ui/UI";
 
 export default function TestsScreen() {
   const insets = useSafeAreaInsets();
-  const { tests } = useAppStore();
+  const { tests, isTestsLoading, testsError, fetchTests } = useAppStore();
+
+  useEffect(() => {
+    if (tests.length === 0) fetchTests();
+  }, []);
 
   const sorted = [...tests].sort((a, b) => new Date(a.date) - new Date(b.date));
   const upcomingCount = sorted.filter((item) => getDaysLeft(item.date) >= 0).length;
@@ -74,7 +78,7 @@ export default function TestsScreen() {
           <Row icon={MapPin} text={item.venue} />
         </View>
 
-        {item.notes ? (
+        {item.instructions ? (
           <View
             style={{
               marginTop: 12,
@@ -84,7 +88,7 @@ export default function TestsScreen() {
             }}
           >
             <Text style={{ fontSize: 12.5, color: colors.body, fontFamily: font.regular, lineHeight: 18 }}>
-              {item.notes}
+              {item.instructions}
             </Text>
           </View>
         ) : null}
@@ -109,7 +113,12 @@ export default function TestsScreen() {
     <View style={{ flex: 1, backgroundColor: colors.background }}>
       <StatusBar style="dark" />
 
-      <ScrollView contentContainerStyle={{ paddingBottom: 110 }}>
+      <ScrollView
+        contentContainerStyle={{ paddingBottom: 110 }}
+        refreshControl={
+          <RefreshControl refreshing={isTestsLoading} onRefresh={fetchTests} tintColor={colors.primary} />
+        }
+      >
         {/* Flat eyebrow — plain background, scrolls with content */}
         <View style={{ paddingTop: insets.top + 16, paddingHorizontal: 24, paddingBottom: 4 }}>
           <Text style={{ fontSize: 11, fontFamily: font.semibold, color: colors.muted, textTransform: "uppercase", letterSpacing: 1 }}>
@@ -175,7 +184,18 @@ export default function TestsScreen() {
         </View>
 
         <View style={{ paddingHorizontal: 24 }}>
-          {sorted.length > 0 ? (
+          {isTestsLoading && tests.length === 0 ? (
+            <View style={{ paddingVertical: 40, alignItems: "center" }}>
+              <ActivityIndicator color={colors.primary} />
+            </View>
+          ) : testsError ? (
+            <>
+              <EmptyState icon={ClipboardList} title="Couldn't load tests & exams" subtitle={testsError} />
+              <TouchableOpacity onPress={fetchTests} style={{ alignSelf: "center", marginTop: 12, paddingVertical: 8 }}>
+                <Text style={{ color: colors.primary, fontFamily: font.semibold, fontSize: 13.5 }}>Try again</Text>
+              </TouchableOpacity>
+            </>
+          ) : sorted.length > 0 ? (
             sorted.map((item) => <TestCard key={item.id} item={item} />)
           ) : (
             <EmptyState icon={ClipboardList} title="Nothing scheduled" subtitle="Tests and exams will appear here once posted." />
@@ -196,12 +216,13 @@ function Row({ icon: Icon, text }) {
 }
 
 function formatDate(dateStr) {
-  const d = new Date(dateStr + "T00:00:00");
+  const d = new Date(dateStr);
   return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
 }
 
 function getDaysLeft(dateStr) {
-  const target = new Date(dateStr + "T00:00:00");
+  const target = new Date(dateStr);
+  target.setHours(0, 0, 0, 0);
   const now = new Date();
   now.setHours(0, 0, 0, 0);
   return Math.round((target - now) / (1000 * 60 * 60 * 24));

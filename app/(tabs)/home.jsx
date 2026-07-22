@@ -1,5 +1,5 @@
-import React from "react";
-import { View, Text, ScrollView, TouchableOpacity } from "react-native";
+import React, { useEffect } from "react";
+import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { useRouter } from "expo-router";
@@ -12,11 +12,19 @@ import { Card, StatusBadge, EmptyState } from "@/components/ui/UI";
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { student, timetable } = useAppStore();
+  const { student, timetable, isTimetableLoading, timetableError, fetchTimetable } = useAppStore();
   const today = getTodayName();
   const isClassDay = WEEKDAYS.includes(today);
   const todaysLectures = isClassDay ? timetable[today] || [] : [];
   const firstName = student?.fullName?.split(" ")[0] || "Student";
+
+  // Fetch on mount if we don't have data yet (e.g. fresh app load with a
+  // restored session). Login/register already trigger this themselves.
+  useEffect(() => {
+    if (Object.keys(timetable).length === 0) {
+      fetchTimetable();
+    }
+  }, []);
 
   const LectureCard = ({ lecture }) => (
     <Card style={{ marginBottom: 14 }}>
@@ -44,7 +52,7 @@ export default function HomeScreen() {
       </View>
 
       <View style={{ marginTop: 14, gap: 8 }}>
-        <Row icon={User} text={lecture.lecturerName} />
+        <Row icon={User} text={lecture.lecturer} />
         <Row icon={MapPin} text={lecture.venue} />
         <Row icon={Clock} text={`${lecture.startTime} - ${lecture.endTime}`} />
       </View>
@@ -55,7 +63,12 @@ export default function HomeScreen() {
     <View style={{ flex: 1, backgroundColor: colors.background }}>
       <StatusBar style="light" />
 
-      <ScrollView contentContainerStyle={{ paddingBottom: 110 }}>
+      <ScrollView
+        contentContainerStyle={{ paddingBottom: 110 }}
+        refreshControl={
+          <RefreshControl refreshing={isTimetableLoading} onRefresh={fetchTimetable} tintColor={colors.primary} />
+        }
+      >
         {/* Flat greeting row — plain background, scrolls with content */}
         <View style={{ paddingTop: insets.top + 16, paddingHorizontal: 24, paddingBottom: 4 }}>
           <Text style={{ fontSize: 11, fontFamily: font.semibold, color: colors.muted, textTransform: "uppercase", letterSpacing: 1 }}>
@@ -147,7 +160,22 @@ export default function HomeScreen() {
             </View>
           </View>
 
-          {todaysLectures.length > 0 ? (
+          {isTimetableLoading && Object.keys(timetable).length === 0 ? (
+            <View style={{ paddingVertical: 40, alignItems: "center" }}>
+              <ActivityIndicator color={colors.primary} />
+            </View>
+          ) : timetableError ? (
+            <Card>
+              <EmptyState
+                icon={CalendarX2}
+                title="Couldn't load your timetable"
+                subtitle={timetableError}
+              />
+              <TouchableOpacity onPress={fetchTimetable} style={{ alignSelf: "center", marginTop: 12, paddingVertical: 8 }}>
+                <Text style={{ color: colors.primary, fontFamily: font.semibold, fontSize: 13.5 }}>Try again</Text>
+              </TouchableOpacity>
+            </Card>
+          ) : todaysLectures.length > 0 ? (
             todaysLectures.map((lecture) => <LectureCard key={lecture.id} lecture={lecture} />)
           ) : (
             <Card>

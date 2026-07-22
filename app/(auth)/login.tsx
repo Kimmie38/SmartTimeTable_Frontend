@@ -13,37 +13,14 @@ import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Hash, Lock, ShieldCheck, Eye, EyeOff } from "lucide-react-native";
 import { colors, font } from "@/utils/theme";
-import { API_BASE_URL } from "@/utils/config";
-
-// --- real student login against the backend ---
-async function loginStudent(matricNumber: string, password: string) {
-  try {
-    const res = await fetch(`${API_BASE_URL}/api/auth/login`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ matricNumber, password }),
-    });
-    const data = await res.json();
-    if (!data.success) {
-      return { ok: false, error: data.message || "Invalid matric number or password." };
-    }
-    await AsyncStorage.setItem("@smtt/student_token", data.data.token);
-    await AsyncStorage.setItem("@smtt/student_profile", JSON.stringify(data.data));
-    return { ok: true };
-  } catch (e) {
-    return {
-      ok: false,
-      error: "Could not reach the server. Check your connection and try again.",
-    };
-  }
-}
+import { useAppStore } from "@/utils/appStore";
 
 export default function LoginScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { loginStudent } = useAppStore();
   const [matricNumber, setMatricNumber] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -62,7 +39,7 @@ export default function LoginScreen() {
     if (res.ok) {
       router.replace("/(tabs)/home");
     } else {
-      setError(res.error!);
+      setError(res.error);
     }
   };
 

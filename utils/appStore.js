@@ -1,161 +1,144 @@
 import React, { createContext, useContext, useState, useCallback, useMemo } from "react";
-import {
-  MOCK_TIMETABLE,
-  MOCK_HISTORY,
-  MOCK_TESTS,
-  MOCK_USERS,
-  DEPARTMENT,
-  nextId,
-} from "./mockData";
+import { api, setAuthToken, loadStoredToken } from "./api";
+import { MOCK_USERS, nextId } from "./mockData";
 
 const AppStoreContext = createContext(null);
 
-function matchId(a, b) {
-  return a.trim().toLowerCase() === b.trim().toLowerCase();
-}
-
 export function AppStoreProvider({ children }) {
+  // Admin side is still mocked for now
   const [users, setUsers] = useState(MOCK_USERS);
-  const [student, setStudent] = useState(null); // active student session
-  const [adminUser, setAdminUser] = useState(null); // active admin session
+  const [adminUser, setAdminUser] = useState(null);
   const [isAdmin, setIsAdmin] = useState(false);
 
-  const [timetable, setTimetable] = useState(MOCK_TIMETABLE);
-  const [history, setHistory] = useState(MOCK_HISTORY);
-  const [tests, setTests] = useState(MOCK_TESTS);
+  const [student, setStudent] = useState(null);
 
-  const findUserIndex = useCallback((id) => users.findIndex((u) => matchId(u.matricNumber, id)), [users]);
+  const [timetable, setTimetable] = useState({});
+  const [isTimetableLoading, setIsTimetableLoading] = useState(false);
+  const [timetableError, setTimetableError] = useState(null);
 
-  // ---------- Student auth ----------
-  const loginStudent = useCallback(
-    (matricNumber, password) => {
-      const found = users.find((u) => matchId(u.matricNumber, matricNumber) && u.password === password);
-      if (!found) return { ok: false, error: "Invalid matric number or password." };
-      if (!found.roles.includes("student")) {
-        return { ok: false, error: "This account doesn't have student access." };
-      }
-      setStudent(found);
+  const [history, setHistory] = useState([]);
+  const [isHistoryLoading, setIsHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState(null);
+
+  const [tests, setTests] = useState([]);
+  const [isTestsLoading, setIsTestsLoading] = useState(false);
+  const [testsError, setTestsError] = useState(null);
+
+  // ---------- Student data fetchers ----------
+  const fetchTimetable = useCallback(async () => {
+    setIsTimetableLoading(true);
+    setTimetableError(null);
+    try {
+      const res = await api.get("/student/timetable");
+      setTimetable(res.timetable);
+    } catch (err) {
+      setTimetableError(err.message);
+    } finally {
+      setIsTimetableLoading(false);
+    }
+  }, []);
+
+  const fetchHistory = useCallback(async () => {
+    setIsHistoryLoading(true);
+    setHistoryError(null);
+    try {
+      const res = await api.get("/student/history");
+      setHistory(res.history);
+    } catch (err) {
+      setHistoryError(err.message);
+    } finally {
+      setIsHistoryLoading(false);
+    }
+  }, []);
+
+  const fetchTests = useCallback(async () => {
+    setIsTestsLoading(true);
+    setTestsError(null);
+    try {
+      const res = await api.get("/student/tests-exams");
+      setTests(res.items);
+    } catch (err) {
+      setTestsError(err.message);
+    } finally {
+      setIsTestsLoading(false);
+    }
+  }, []);
+
+  // Pulls everything at once — call after login/register and on session restore
+  const loadStudentData = useCallback(() => {
+    fetchTimetable();
+    fetchHistory();
+    fetchTests();
+  }, [fetchTimetable, fetchHistory, fetchTests]);
+
+  const updateProfile = useCallback(async (updates) => {
+    try {
+      const res = await api.put("/student/profile", updates);
+      setStudent((prev) => ({ ...prev, ...res.data }));
       return { ok: true };
-    },
-    [users]
-  );
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  }, []);
 
-  const registerStudent = useCallback(
-    (data) => {
-      const idx = findUserIndex(data.matricNumber);
-      if (idx > -1) {
-        const existing = users[idx];
-        if (existing.roles.includes("student")) {
-          return { ok: false, error: "An account with this matric number already exists." };
-        }
-        if (existing.password !== data.password) {
-          return {
-            ok: false,
-            error: "This ID is already registered (as admin) with a different password. Use that password to link student access.",
-          };
-        }
-        const merged = { ...existing, ...data, department: DEPARTMENT, roles: [...existing.roles, "student"] };
-        setUsers((prev) => prev.map((u, i) => (i === idx ? merged : u)));
-        setStudent(merged);
-        return { ok: true };
-      }
-      const newUser = { ...data, department: DEPARTMENT, title: "", roles: ["student"] };
-      setUsers((prev) => [...prev, newUser]);
-      setStudent(newUser);
+  // ---------- Student auth (real backend) ----------
+  const loginStudent = useCallback(async (matricNumber, password) => {
+    try {
+      const res = await api.post("/auth/login", { matricNumber, password }, { auth: false });
+      await setAuthToken(res.data.token);
+      setStudent(res.data);
+      loadStudentData();
       return { ok: true };
-    },
-    [users, findUserIndex]
-  );
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  }, [loadStudentData]);
 
-  const logoutStudent = useCallback(() => setStudent(null), []);
-
-  // ---------- Admin auth ----------
-  const loginAdmin = useCallback(
-    (idNumber, password) => {
-      const found = users.find((u) => matchId(u.matricNumber, idNumber) && u.password === password);
-      if (!found) return { ok: false, error: "Invalid ID or password." };
-      if (!found.roles.includes("admin")) {
-        return { ok: false, error: "This account doesn't have admin access." };
-      }
-      setAdminUser(found);
-      setIsAdmin(true);
+  const registerStudent = useCallback(async (formData) => {
+    try {
+      const res = await api.post("/auth/register", formData, { auth: false });
+      await setAuthToken(res.data.token);
+      setStudent(res.data);
+      loadStudentData();
       return { ok: true };
-    },
-    [users]
-  );
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  }, [loadStudentData]);
 
-  const registerAdmin = useCallback(
-    (data) => {
-      const idx = findUserIndex(data.matricNumber);
-      if (idx > -1) {
-        const existing = users[idx];
-        if (existing.roles.includes("admin")) {
-          return { ok: false, error: "An admin account with this ID already exists." };
-        }
-        if (existing.password !== data.password) {
-          return {
-            ok: false,
-            error: "This ID is already registered (as student) with a different password. Use that password to link admin access.",
-          };
-        }
-        const merged = { ...existing, ...data, roles: [...existing.roles, "admin"] };
-        setUsers((prev) => prev.map((u, i) => (i === idx ? merged : u)));
-        setAdminUser(merged);
-        setIsAdmin(true);
-        return { ok: true };
-      }
-      const newUser = { ...data, department: DEPARTMENT, level: "", semester: "", roles: ["admin"] };
-      setUsers((prev) => [...prev, newUser]);
-      setAdminUser(newUser);
-      setIsAdmin(true);
-      return { ok: true };
-    },
-    [users, findUserIndex]
-  );
+  const logoutStudent = useCallback(async () => {
+    await setAuthToken(null);
+    setStudent(null);
+    setTimetable({});
+    setHistory([]);
+    setTests([]);
+  }, []);
+
+  const restoreStudentSession = useCallback(async () => {
+    const token = await loadStoredToken();
+    if (!token) return;
+    try {
+      const res = await api.get("/student/profile");
+      setStudent(res.data);
+      loadStudentData();
+    } catch (err) {
+      await setAuthToken(null);
+    }
+  }, [loadStudentData]);
+
+  // ---------- Admin auth (still mock) ----------
+  const loginAdmin = useCallback((idNumber, password) => {
+    const found = users.find((u) => u.matricNumber.trim().toLowerCase() === idNumber.trim().toLowerCase() && u.password === password);
+    if (!found) return { ok: false, error: "Invalid ID or password." };
+    if (!found.roles.includes("admin")) return { ok: false, error: "This account doesn't have admin access." };
+    setAdminUser(found);
+    setIsAdmin(true);
+    return { ok: true };
+  }, [users]);
 
   const logoutAdmin = useCallback(() => {
     setIsAdmin(false);
     setAdminUser(null);
-  }, []);
-
-  // ---------- Timetable / history / tests ----------
-  const updateLectureStatus = useCallback((day, id, status) => {
-    setTimetable((prev) => ({
-      ...prev,
-      [day]: prev[day].map((l) => (l.id === id ? { ...l, status } : l)),
-    }));
-  }, []);
-
-  const completeLecture = useCallback((day, lecture, attachment) => {
-    setTimetable((prev) => ({
-      ...prev,
-      [day]: prev[day].filter((l) => l.id !== lecture.id),
-    }));
-    setHistory((prev) => [
-      {
-        id: nextId(),
-        date: new Date().toISOString().slice(0, 10),
-        courseCode: lecture.courseCode,
-        courseTitle: lecture.courseTitle,
-        lecturerName: lecture.lecturerName,
-        venue: lecture.venue,
-        startTime: lecture.startTime,
-        endTime: lecture.endTime,
-        attachment: attachment || null,
-      },
-      ...prev,
-    ]);
-  }, []);
-
-  const addLecture = useCallback((day, lecture) => {
-    setTimetable((prev) => ({
-      ...prev,
-      [day]: [...(prev[day] || []), { ...lecture, id: nextId(), status: "Pending" }],
-    }));
-  }, []);
-
-  const addTest = useCallback((test) => {
-    setTests((prev) => [{ ...test, id: nextId() }, ...prev]);
   }, []);
 
   const value = useMemo(
@@ -163,38 +146,24 @@ export function AppStoreProvider({ children }) {
       student,
       adminUser,
       isAdmin,
-      timetable,
-      history,
-      tests,
+      timetable, isTimetableLoading, timetableError, fetchTimetable,
+      history, isHistoryLoading, historyError, fetchHistory,
+      tests, isTestsLoading, testsError, fetchTests,
+      loadStudentData,
+      updateProfile,
       loginStudent,
       registerStudent,
       logoutStudent,
+      restoreStudentSession,
       loginAdmin,
-      registerAdmin,
       logoutAdmin,
-      updateLectureStatus,
-      completeLecture,
-      addLecture,
-      addTest,
     }),
-    [
-      student,
-      adminUser,
-      isAdmin,
-      timetable,
-      history,
-      tests,
-      loginStudent,
-      registerStudent,
-      logoutStudent,
-      loginAdmin,
-      registerAdmin,
-      logoutAdmin,
-      updateLectureStatus,
-      completeLecture,
-      addLecture,
-      addTest,
-    ]
+    [student, adminUser, isAdmin,
+      timetable, isTimetableLoading, timetableError, fetchTimetable,
+      history, isHistoryLoading, historyError, fetchHistory,
+      tests, isTestsLoading, testsError, fetchTests,
+      loadStudentData, updateProfile, loginStudent, registerStudent, logoutStudent, restoreStudentSession,
+      loginAdmin, logoutAdmin]
   );
 
   return <AppStoreContext.Provider value={value}>{children}</AppStoreContext.Provider>;
